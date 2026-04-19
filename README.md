@@ -1,25 +1,8 @@
 # DropTransfer CLI
 
-Send files from command line to browser via WebSocket relay (simple, no WebRTC needed).
+Send files from command line to browser via WebRTC P2P. Compatible with https://qqshi13.github.io/droptransfer/
 
 ## Quick Start
-
-### 1. Start the relay server (on any machine accessible to both sides)
-
-```bash
-# On your server or local machine
-node relay-server.js
-# Server starts on port 3000
-```
-
-### 2. Update CLI to point to your relay
-
-Edit `droptransfer-cli.js` and change:
-```javascript
-const RELAY_SERVER = 'ws://your-server-ip:3000';
-```
-
-### 3. Send files
 
 ```bash
 npm install
@@ -31,47 +14,53 @@ node droptransfer-cli.js myfile.txt
 
 ## How It Works
 
-1. **CLI generates a code** and connects to relay server
+1. **CLI connects to PeerJS cloud** and gets a code (peer ID)
 2. **Share the code** with receiver
-3. **Receiver** goes to https://qqshi13.github.io/droptransfer/ (updated version needed)
-4. **Receiver enters code** and connects to same relay
-5. **Relay bridges** the connection
-6. **Files transfer** through relay (or upgrade to WebRTC later)
-
-## Deployment Options
-
-### Option A: Local Network
-```bash
-# On sender machine
-node relay-server.js
-# Edit CLI: const RELAY_SERVER = 'ws://localhost:3000'
-```
-
-### Option B: VPS/Cloud
-Deploy `relay-server.js` to:
-- Glitch (free): https://glitch.com
-- Heroku (free tier)
-- Your VPS
-- Fly.io (free)
-
-### Option C: Public Relay (coming soon)
-A public relay will be available at `wss://droptransfer-relay.example.com`
-
-## Protocol
-
-Message types:
-- `join` - Join room as sender/receiver
-- `metadata` - File info
-- `ready` - Receiver ready
-- `chunk` - File data (base64)
-- `file-start` / `file-complete` - File boundaries
-- `complete` - All files done
+3. **Receiver** goes to https://qqshi13.github.io/droptransfer/
+4. **Receiver enters code** and connects via WebRTC
+5. **Files transfer directly** (P2P, no server storage)
 
 ## Requirements
 
 - Node.js 14+
-- Network access to relay server
-- Browser receiver (web version needs update)
+- `wrtc` npm package (requires build tools)
+- Internet connection (for PeerJS signaling)
+- Browser receiver at https://qqshi13.github.io/droptransfer/
+
+## Installation
+
+```bash
+# Clone
+git clone https://github.com/QQSHI13/droptransfer-cli.git
+cd droptransfer-cli
+
+# Install dependencies
+npm install
+
+# wrtc requires native compilation
+# On Ubuntu/Debian:
+#   sudo apt-get install build-essential python3
+# On Windows:
+#   npm install -g windows-build-tools
+```
+
+## Usage
+
+```bash
+# Single file
+node droptransfer-cli.js document.pdf
+
+# Multiple files
+node droptransfer-cli.js file1.jpg file2.mp4 file3.zip
+```
+
+## Network
+
+| Scenario | Works? | Notes |
+|----------|--------|-------|
+| Same WiFi | ✅ Yes | Direct local connection |
+| Different networks | ✅ Yes | STUN helps NAT traversal |
+| Mobile 4G/5G | ⚠️ Maybe | CGNAT may need TURN |
 
 ## License
 
