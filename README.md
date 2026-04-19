@@ -1,70 +1,77 @@
 # DropTransfer CLI
 
-Send files from command line to browser via WebRTC P2P.
+Send files from command line to browser via WebSocket relay (simple, no WebRTC needed).
 
 ## Quick Start
 
-```bash
-# Install dependencies
-npm install
+### 1. Start the relay server (on any machine accessible to both sides)
 
-# Send a file
+```bash
+# On your server or local machine
+node relay-server.js
+# Server starts on port 3000
+```
+
+### 2. Update CLI to point to your relay
+
+Edit `droptransfer-cli.js` and change:
+```javascript
+const RELAY_SERVER = 'ws://your-server-ip:3000';
+```
+
+### 3. Send files
+
+```bash
+npm install
 node droptransfer-cli.js myfile.txt
 
-# Or with alias
+# Or use the shortcut
 ./qq myfile.txt
 ```
 
 ## How It Works
 
-1. **CLI generates a code** (PeerJS peer ID)
+1. **CLI generates a code** and connects to relay server
 2. **Share the code** with receiver
-3. **Receiver** goes to https://qqshi13.github.io/droptransfer/
-4. **Receiver enters code** and connects
-5. **Files transfer directly** (P2P, no server storage)
+3. **Receiver** goes to https://qqshi13.github.io/droptransfer/ (updated version needed)
+4. **Receiver enters code** and connects to same relay
+5. **Relay bridges** the connection
+6. **Files transfer** through relay (or upgrade to WebRTC later)
 
-## Usage
+## Deployment Options
 
+### Option A: Local Network
 ```bash
-# Single file
-node droptransfer-cli.js document.pdf
-
-# Multiple files
-node droptransfer-cli.js file1.jpg file2.mp4 file3.zip
-
-# Folder (not implemented yet)
-# node droptransfer-cli.js --folder myfolder/
+# On sender machine
+node relay-server.js
+# Edit CLI: const RELAY_SERVER = 'ws://localhost:3000'
 ```
+
+### Option B: VPS/Cloud
+Deploy `relay-server.js` to:
+- Glitch (free): https://glitch.com
+- Heroku (free tier)
+- Your VPS
+- Fly.io (free)
+
+### Option C: Public Relay (coming soon)
+A public relay will be available at `wss://droptransfer-relay.example.com`
+
+## Protocol
+
+Message types:
+- `join` - Join room as sender/receiver
+- `metadata` - File info
+- `ready` - Receiver ready
+- `chunk` - File data (base64)
+- `file-start` / `file-complete` - File boundaries
+- `complete` - All files done
 
 ## Requirements
 
 - Node.js 14+
-- Internet connection (for signaling server)
-- Browser receiver at https://qqshi13.github.io/droptransfer/
-
-## Features
-
-- ✅ Direct P2P transfer (no intermediary server)
-- ✅ End-to-end encryption (WebRTC DTLS)
-- ✅ Works across networks (NAT traversal via STUN)
-- ✅ Progress bar
-- ✅ Multiple file support
-- ✅ Large file support (chunked transfer)
-
-## Network Requirements
-
-| Scenario | Works? | Notes |
-|----------|--------|-------|
-| Same WiFi | ✅ Yes | Direct local connection |
-| Different networks | ✅ Yes | STUN/TURN helps NAT traversal |
-| Mobile 4G/5G | ⚠️ Maybe | CGNAT may need TURN relay |
-| Corporate firewall | ⚠️ Maybe | May block WebRTC |
-
-## Limitations
-
-- Receiver must use browser (no CLI-to-CLI yet)
-- Max 5 minute wait for receiver to connect
-- Requires PeerJS cloud server for initial signaling
+- Network access to relay server
+- Browser receiver (web version needs update)
 
 ## License
 
