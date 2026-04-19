@@ -1,50 +1,42 @@
 #!/usr/bin/env node
 /**
- * DropTransfer CLI - WebRTC/PeerJS version
+ * DropTransfer CLI - WebRTC version with PeerJS for Node.js
  * 
- * Uses WebRTC for P2P file transfer, compatible with web DropTransfer
- * 
- * Usage: node droptransfer-cli.js <file1> [file2] ...
+ * Sets up browser globals so PeerJS works in Node.js with wrtc
  */
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// Load wrtc for Node.js WebRTC support
-let RTCPeerConnection, RTCSessionDescription, RTCIceCandidate;
-try {
-  const wrtc = require('wrtc');
-  RTCPeerConnection = wrtc.RTCPeerConnection;
-  RTCSessionDescription = wrtc.RTCSessionDescription;
-  RTCIceCandidate = wrtc.RTCIceCandidate;
-  console.log('[INFO] Using wrtc for WebRTC support');
-} catch (err) {
-  console.error('❌ wrtc not installed. Run: npm install wrtc');
-  console.error('   Note: wrtc requires build tools (python3, build-essential)');
-  process.exit(1);
-}
+// Setup browser globals for PeerJS
+const wrtc = require('wrtc');
+global.RTCPeerConnection = wrtc.RTCPeerConnection;
+global.RTCSessionDescription = wrtc.RTCSessionDescription;
+global.RTCIceCandidate = wrtc.RTCIceCandidate;
 
-// PeerJS imports
-const { Peer } = require('peerjs');
+// Mock window and document that PeerJS expects
+global.window = {
+  RTCPeerConnection: wrtc.RTCPeerConnection,
+  RTCSessionDescription: wrtc.RTCSessionDescription,
+  RTCIceCandidate: wrtc.RTCIceCandidate,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  location: { protocol: 'https:', host: '0.peerjs.com' }
+};
+global.document = { addEventListener: () => {}, removeEventListener: () => {} };
+global.navigator = { userAgent: 'node', platform: 'node' };
+global.location = global.window.location;
 
-// Configuration (same as web version)
+// Now import PeerJS
+const Peer = require('peerjs');
+
+// Configuration
 const PEERJS_CONFIG = {
   host: '0.peerjs.com',
   port: 443,
   secure: true,
   debug: 1
-};
-
-const ICE_CONFIG = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' }
-  ],
-  iceCandidatePoolSize: 10
 };
 
 const CHUNK_SIZE = 262144; // 256KB chunks
@@ -54,7 +46,6 @@ class DropTransferCLI {
     this.files = files;
     this.peer = null;
     this.conn = null;
-    this.fileIndex = 0;
     this.transferStartTime = null;
   }
 
@@ -136,7 +127,9 @@ class DropTransferCLI {
     });
 
     conn.on('data', (data) => {
-      this.handleResponse(data);
+      if (data === 'ready' || (data.type === 'ready')) {
+        console.log('✋ Receiver ready!');
+      }
     });
 
     conn.on('close', () => {
@@ -152,7 +145,7 @@ class DropTransferCLI {
   async sendFiles() {
     const totalSize = this.files.reduce((sum, f) => sum + fs.statSync(f).size, 0);
     
-    // Send metadata (same format as web version)
+    // Send metadata
     const metadata = {
       type: 'metadata',
       files: this.files.map(f => ({
@@ -166,9 +159,6 @@ class DropTransferCLI {
 
     console.log(`📋 Sending metadata (${this.files.length} files, ${this.formatSize(totalSize)} total)...`);
     this.conn.send(metadata);
-
-    // Wait for ready signal from receiver
-    await this.waitForReady();
 
     // Send each file
     for (let i = 0; i < this.files.length; i++) {
@@ -190,29 +180,6 @@ class DropTransferCLI {
     setTimeout(() => this.cleanup(), 2000);
   }
 
-  waitForReady() {
-    return new Promise((resolve) => {
-      const checkReady = (data) => {
-        if (data === 'ready' || (data.type === 'ready')) {
-          console.log('✋ Receiver ready!');
-          resolve();
-        }
-      };
-      
-      // Listen for ready signal
-      const originalHandler = this.conn._handlers?.data;
-      this.conn.on('data', (data) => {
-        checkReady(data);
-        if (originalHandler) originalHandler(data);
-      });
-      
-      // Also handle if ready was already sent
-      setTimeout(() => {
-        if (this.conn.open) resolve();
-      }, 1000);
-    });
-  }
-
   async sendFile(filePath, fileIndex) {
     const fileName = path.basename(filePath);
     const stats = fs.statSync(filePath);
@@ -220,7 +187,7 @@ class DropTransferCLI {
     
     console.log(`\n📤 Sending: ${fileName} (${this.formatSize(totalSize)})`);
 
-    // Send file start (same format as web)
+    // Send file start
     this.conn.send({
       type: 'file-start',
       index: fileIndex,
@@ -228,21 +195,20 @@ class DropTransferCLI {
       size: totalSize
     });
 
-    // Read and send chunks as ArrayBuffer (for binary compatibility)
+    // Read and send chunks
     const stream = fs.createReadStream(filePath, { highWaterMark: CHUNK_SIZE });
     let chunkIndex = 0;
     let bytesSent = 0;
 
     for await (const chunk of stream) {
-      // Convert Buffer to ArrayBuffer for WebRTC
+      // Convert Buffer to ArrayBuffer
       const arrayBuffer = chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength);
       
       this.conn.send({
         type: 'chunk',
         fileIndex: fileIndex,
         chunkIndex: chunkIndex,
-        data: arrayBuffer,
-        size: chunk.length
+        data: arrayBuffer
       });
 
       bytesSent += chunk.length;
@@ -252,7 +218,7 @@ class DropTransferCLI {
       const progress = (bytesSent / totalSize * 100).toFixed(1);
       process.stdout.write(`\r   Progress: ${progress}% (${this.formatSize(bytesSent)}/${this.formatSize(totalSize)})  `);
 
-      // Throttle to prevent overwhelming the buffer
+      // Throttle if buffer full
       if (this.conn.bufferSize > 8 * 1024 * 1024) {
         await this.sleep(50);
       }
@@ -262,17 +228,7 @@ class DropTransferCLI {
     console.log(`   ✓ Sent ${chunkIndex} chunks`);
 
     // Send file complete
-    this.conn.send({
-      type: 'file-complete',
-      index: fileIndex
-    });
-  }
-
-  handleResponse(data) {
-    if (typeof data === 'string' && data === 'ready') {
-      // Handled in waitForReady
-    }
-    // Other responses can be handled here
+    this.conn.send({ type: 'file-complete', index: fileIndex });
   }
 
   formatSize(bytes) {
@@ -288,24 +244,18 @@ class DropTransferCLI {
   }
 
   cleanup() {
-    if (this.conn) {
-      this.conn.close();
-    }
-    if (this.peer) {
-      this.peer.destroy();
-    }
+    if (this.conn) this.conn.close();
+    if (this.peer) this.peer.destroy();
     console.log('👋 Cleanup complete');
     process.exit(0);
   }
 }
 
-// Handle Ctrl+C
 process.on('SIGINT', () => {
   console.log('\n\n🛑 Interrupted');
   process.exit(0);
 });
 
-// Main
 const files = process.argv.slice(2);
 const transfer = new DropTransferCLI(files);
 transfer.start().catch(err => {
