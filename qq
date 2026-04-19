@@ -1,0 +1,6 @@
+#!/bin/bash
+# DropTransfer CLI wrapper - simple qq command
+# Usage: qq <file1> [file2] ...
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+node "$SCRIPT_DIR/droptransfer-cli.js" "$@"

@@ -1,0 +1,25 @@
+{
+  "name": "droptransfer-cli",
+  "version": "1.0.0",
+  "description": "CLI tool for DropTransfer - Send files via WebRTC P2P",
+  "main": "droptransfer-cli.js",
+  "bin": {
+    "droptransfer": "droptransfer-cli.js",
+    "qq": "droptransfer-cli.js"
+  },
+  "scripts": {
+    "start": "node droptransfer-cli.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "webrtc",
+    "p2p",
+    "file-transfer",
+    "cli"
+  ],
+  "author": "QQ",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "peerjs": "^1.5.2"
+  }
+}
